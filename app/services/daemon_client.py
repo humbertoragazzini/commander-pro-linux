@@ -2,6 +2,7 @@ import socket
 import json
 from typing import Tuple, Optional, Any, Dict
 from app.utils.logger import get_logger
+from app.utils.parsers import parse_status_output
 
 logger = get_logger(__name__)
 
@@ -64,12 +65,14 @@ class DaemonClient:
         success, msg, _ = self._send_request("initialize_all")
         return success, msg
 
-    def get_status(self) -> Tuple[bool, str]:
-        """Requests device status from daemon."""
+    def get_status(self) -> Tuple[bool, str, Dict[int, int]]:
+        """Requests device status from daemon and parses fan RPMs."""
         success, msg, data = self._send_request("get_status")
+        parsed_rpms = {}
         if success and data and "status_text" in data:
-            return True, data["status_text"]
-        return success, msg
+            parsed_rpms = parse_status_output(data["status_text"])
+            return True, data["status_text"], parsed_rpms
+        return success, msg, parsed_rpms
 
     def list_devices(self) -> Tuple[bool, str]:
         """Requests list of devices from daemon."""

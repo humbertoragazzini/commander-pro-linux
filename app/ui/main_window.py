@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QLabel, QGroupBox, QMessageBox, QScrollArea
+    QPushButton, QLabel, QGroupBox, QMessageBox, QScrollArea,
+    QComboBox
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from app.ui.fan_widget import FanControlWidget
+from app.ui.fan_speed_graph import FanSpeedGraphWidget
 from app.services.daemon_client import DaemonClient
 from app.models.preset import Preset
 from app.config.settings import load_settings, save_settings, AppSettings
@@ -22,6 +24,8 @@ class MainWindow(QMainWindow):
         self.client = DaemonClient()
         self.settings = load_settings()
         self.fan_widgets: dict[int, FanControlWidget] = {}
+        self.poll_timer = QTimer(self)
+        self.poll_timer.timeout.connect(self.poll_daemon_status)
         
         self._setup_ui()
         self._load_settings_to_ui()
@@ -72,6 +76,31 @@ class MainWindow(QMainWindow):
         preset_group.setLayout(preset_layout)
         layout.addWidget(preset_group)
         
+        # --- Graph Section ---
+        graph_group = QGroupBox("Live Fan Monitoring")
+        graph_layout = QVBoxLayout()
+        
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Refresh Interval:"))
+        self.refresh_combo = QComboBox()
+        self.refresh_combo.addItems(["1s", "2s", "5s"])
+        self.refresh_combo.setCurrentText("2s")
+        self.refresh_combo.currentTextChanged.connect(self.on_refresh_interval_changed)
+        controls_layout.addWidget(self.refresh_combo)
+        
+        self.graph_status_label = QLabel("Waiting for data...")
+        self.graph_status_label.setStyleSheet("color: gray;")
+        controls_layout.addWidget(self.graph_status_label)
+        controls_layout.addStretch()
+        
+        graph_layout.addLayout(controls_layout)
+        
+        self.graph_widget = FanSpeedGraphWidget()
+        graph_layout.addWidget(self.graph_widget)
+        
+        graph_group.setLayout(graph_layout)
+        layout.addWidget(graph_group)
+        
         # --- Actions Section ---
         actions_layout = QHBoxLayout()
         self.btn_apply_all = QPushButton("Apply All Fans")
@@ -91,6 +120,9 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("color: gray;")
         layout.addWidget(self.status_label)
         layout.addStretch()
+        
+        # Start timer
+        self.on_refresh_interval_changed(self.refresh_combo.currentText())
 
     def _load_settings_to_ui(self):
         for str_id, speed in self.settings.fan_speeds.items():
@@ -134,6 +166,40 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Apply Errors", f"Some commands failed:\n{err_msg}")
         else:
             self.set_status("All fan speeds applied successfully.")
+
+    def on_refresh_interval_changed(self, text: str):
+        seconds = int(text.replace("s", ""))
+        self.poll_timer.start(seconds * 1000)
+
+    def poll_daemon_status(self):
+        success, msg, parsed_rpms = self.client.get_status()
+        
+        fan_data = {}
+        using_fallback = False
+        
+        if success:
+            for fid in range(1, 7):
+                if fid in parsed_rpms:
+                    fan_data[fid] = parsed_rpms[fid]
+                else:
+                    # Fallback to slider percentage
+                    if fid in self.fan_widgets:
+                        fan_data[fid] = self.fan_widgets[fid].get_speed()
+                        using_fallback = True
+                        
+            if using_fallback:
+                self.graph_status_label.setText("Displaying: Speed % (Fallback)")
+                self.graph_status_label.setStyleSheet("color: orange;")
+            else:
+                self.graph_status_label.setText("Displaying: Real RPM")
+                self.graph_status_label.setStyleSheet("color: green;")
+                
+            self.graph_widget.add_data_points(fan_data)
+        else:
+            self.graph_status_label.setText("Daemon Error (Skipped tick)")
+            self.graph_status_label.setStyleSheet("color: red;")
+            
+        self.graph_widget.redraw_graph()
 
     def on_save_settings(self):
         speeds = {str(fid): fw.get_speed() for fid, fw in self.fan_widgets.items()}

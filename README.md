@@ -198,7 +198,40 @@ Let's dissect what happens when you drag the "Fan 1" slider to 80% and click "Ap
 
 ---
 
-## 10. Future Improvements
+## 10. Live Fan Speed Graph (PyQtGraph Integration)
+
+A core feature of the UI is the real-time Fan Speed monitoring graph located below the fan controls. 
+
+**What the graph does:**
+It plots the real-time speed of fans 1-6 on a scrolling line chart using `pyqtgraph`. Each fan has a distinctly colored history line.
+
+**How polling works:**
+The UI never halts to wait on `liquidctl`. Instead, `main_window.py` utilizes a `QTimer` that ticks at a user-defined interval (e.g., every 2 seconds). On every tick, the timer calls `poll_daemon_status()` which queries the daemon socket for the latest device status.
+
+**Data Flow (Daemon → GUI → Graph):**
+1. Timer ticks. UI calls `DaemonClient.get_status()`.
+2. Client sends `{"action": "get_status"}` over the Unix socket.
+3. Daemon runs `liquidctl status` locally and returns the raw stdout string in JSON.
+4. Client passes this raw string to `app/utils/parsers.py:parse_status_output()`.
+5. The regex parser extracts actual RPM values and returns a Python dictionary: `{1: 800, 2: 0, ...}`.
+6. UI receives this dictionary and feeds it directly into `FanSpeedGraphWidget.add_data_points()`, which appends it to a bounded history buffer and redraws the UI.
+
+**RPM vs Fallback Logic:**
+Not all setups report RPM. If `get_status()` returns a success but parsing fails to find valid RPM numbers for a fan (e.g., due to liquidctl output formats), the UI cleverly fails-over to "Fallback Mode". It pulls the currently targeted percentage from the slider (`FanControlWidget.get_speed()`) and plots that instead, instantly turning the UI status text orange to indicate that the plot represents *requested percent%* rather than *actual RPM*. 
+
+**Refresh Interval Behavior:**
+A dropdown allows shifting the `QTimer` dynamically ("1s", "2s", "5s"). Changing it instantly reschedules the QTimer loop, allowing for faster response tracking under load or slower polling to save CPU cycles. The graph's history array remains bounded by an overall fixed limit (e.g., 60 points) so memory does not leak over hours of uptime.
+
+**Files Added/Modified for this Feature:**
+- `app/ui/fan_speed_graph.py` **[NEW]**: The encapsulated object implementing `pyqtgraph.PlotWidget`.
+- `app/utils/parsers.py` **[NEW]**: The regex-based stdout parser mapping.
+- `app/ui/main_window.py` **[MODIFY]**: Incorporated `QTimer`, interval Dropdown, fallback switching logic, and graph anchoring.
+- `app/services/daemon_client.py` **[MODIFY]**: Upgraded to intelligently return parsed dictionary data alongside raw text.
+- `requirements.txt` **[MODIFY]**: Required the addition of `pyqtgraph`.
+
+---
+
+## 11. Future Improvements
 
 With this robust dual-process architecture, several massive capabilities are unlocked:
 
