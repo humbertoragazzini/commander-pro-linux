@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from app.ui.fan_widget import FanControlWidget
-from app.services.liquidctl_runner import LiquidctlRunner
+from app.services.daemon_client import DaemonClient
 from app.models.preset import Preset
 from app.config.settings import load_settings, save_settings, AppSettings
 from app.utils.logger import get_logger
@@ -19,7 +19,7 @@ class MainWindow(QMainWindow):
         self.setMinimumWidth(400)
         self.setMinimumHeight(500)
         
-        self.runner = LiquidctlRunner(use_sudo=True)
+        self.client = DaemonClient()
         self.settings = load_settings()
         self.fan_widgets: dict[int, FanControlWidget] = {}
         
@@ -106,8 +106,7 @@ class MainWindow(QMainWindow):
 
     def on_initialize(self):
         self.set_status("Initializing device...")
-        # Since it runs sudo, it might block. For a simple app, we do it synchronously.
-        success, msg = self.runner.initialize_devices()
+        success, msg = self.client.initialize_devices()
         if success:
             self.set_status("Device initialized successfully.")
             QMessageBox.information(self, "Success", "Device initialized successfully.")
@@ -125,7 +124,7 @@ class MainWindow(QMainWindow):
         errors = []
         for fid, fw in self.fan_widgets.items():
             speed = fw.get_speed()
-            success, msg = self.runner.set_fan_speed(fid, speed)
+            success, msg = self.client.set_fan_speed(fid, speed)
             if not success:
                 errors.append(f"Fan {fid}: {msg}")
                 

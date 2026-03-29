@@ -10,7 +10,8 @@ The project is structured with a clean separation of concerns:
 - **`models/`**: Simple data classes such as defaults and Presets.
 - **`config/`**: Handles Loading and Saving of JSON user preferences to `~/.config/commander-pro-control/config.json`.
 - **`utils/`**: Shared validation logic and a central console logger.
-- **`services/`**: The core `liquidctl_runner.py` service. This completely abstracts the `subprocess` calls. It is responsible for string generation, `sudo` injection, error handling, and output parsing. The UI never runs CLI commands directly.
+- **`services/`**: The core `liquidctl_runner.py` service and the newly added `daemon_client.py` for IPC. The UI no longer runs CLI commands directly and communicates via sockets.
+- **`daemon/`**: The privileged python daemon that receives JSON commands over Unix domain sockets to securely execute `liquidctl` actions without giving the GUI sudo rights.
 - **`ui/`**: PySide6 widgets. Broken down into the app window `main_window.py` and modular, reusable child components such as `fan_widget.py`. Let you easily append sensor readouts or new properties.
 - **`main.py`**: PySide6 Application entrypoint. 
 
@@ -36,22 +37,22 @@ This layout cleanly separates business logic (services, models, config) from pre
    pip install -r requirements.txt
    ```
 
-## How to run the App
+## How to run the App (Development Mode)
 
-Execute the main application module from the root directory:
+Since the architecture is cleanly split between a privileged daemon and an unprivileged GUI, you must start both:
 
-```bash
-python3 -m app.main
-```
+1. **Start the background daemon (needs root privileges):**
+   ```bash
+   sudo python3 -m app.daemon.server
+   ```
+   *The daemon listens on `/tmp/commander_pro_control.sock` and only allows strictly validated operations.*
 
-## Setup permissions (Sudoers fix)
-Since `liquidctl` needs superuser rights, the app invokes `sudo liquidctl ...`. To not run into interactive password prompts (GUI blocking), you can allow your user password-less `liquidctl` sudo execution.
+2. **Start the unprivileged GUI (in a different terminal window):**
+   ```bash
+   python3 -m app.main
+   ```
 
-Run `sudo visudo` and append:
-```bash
-yourusername ALL=(root) NOPASSWD: /usr/bin/liquidctl
-```
-*(Check where liquidctl is placed via `which liquidctl` and adjust the path)*
+If the daemon is not running, the GUI will gracefully show connection errors instead of locking up.
 
 ## Suggestions for Next Improvements
 

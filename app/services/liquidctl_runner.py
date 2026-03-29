@@ -41,6 +41,15 @@ class LiquidctlRunner:
         """Runs: liquidctl initialize all"""
         return self._run_command(["initialize", "all"])
 
+    def get_status(self) -> Tuple[bool, str]:
+        """Runs: liquidctl --match 'Commander Pro' --pick 0 status"""
+        args = self.base_match + ["status"]
+        return self._run_command(args)
+
+    def list_devices(self) -> Tuple[bool, str]:
+        """Runs: liquidctl status (shows all devices)"""
+        return self._run_command(["status"])
+
     def set_fan_speed(self, fan_number: int, speed: int) -> Tuple[bool, str]:
         """Runs: liquidctl --match 'Commander Pro' --pick 0 set fan<N> speed <SPEED>"""
         if not validate_fan_number(fan_number):
@@ -50,3 +59,4 @@ class LiquidctlRunner:
         
         args = self.base_match + ["set", f"fan{fan_number}", "speed", str(speed)]
         return self._run_command(args)
+
