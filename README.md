@@ -182,7 +182,37 @@ If you start the GUI without the daemon running, the UI handles it perfectly. Th
 
 ---
 
-## 9. End-To-End Work Example
+## 9. Running as a System Daemon (Systemd)
+
+To ensure the daemon runs automatically at boot, you can create a systemd service unit.
+
+1. Create a file named `/etc/systemd/system/commander-pro-daemon.service`:
+```ini
+[Unit]
+Description=Commander Pro Control Daemon
+After=multi-user.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/<youruser>/Projects/commander-pro-linux
+ExecStart=/home/<youruser>/Projects/commander-pro-linux/.venv/bin/python -m app.daemon.server
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
+2. Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart commander-pro-daemon
+sudo systemctl status commander-pro-daemon
+```
+
+---
+
+## 10. End-To-End Work Example
 
 Let's dissect what happens when you drag the "Fan 1" slider to 80% and click "Apply All":
 
@@ -198,7 +228,7 @@ Let's dissect what happens when you drag the "Fan 1" slider to 80% and click "Ap
 
 ---
 
-## 10. Live Fan Speed Graph (PyQtGraph Integration)
+## 11. Live Fan Speed Graph (PyQtGraph Integration)
 
 A core feature of the UI is the real-time Fan Speed monitoring graph located below the fan controls. 
 
@@ -231,12 +261,12 @@ A dropdown allows shifting the `QTimer` dynamically ("1s", "2s", "5s"). Changing
 
 ---
 
-## 11. Future Improvements
+## 12. Future Improvements
 
 With this robust dual-process architecture, several massive capabilities are unlocked:
 
 *   **Background Polling & Fan Curves:** Because the daemon runs continuously, we could add a `QTimer` or standard threading loop inside the daemon to constantly query system temperatures. It could adjust fan speeds in the background entirely independent of the GUI. You could close the GUI, and your fans would still dynamically react to heat.
-*   **Systemd Service:** The daemon can be easily wrapped in a `commander-pro.service` file to launch at boot by default without needing an active terminal window.
+*   **Systemd Service:** The daemon can be easily wrapped in a `commander-pro.service` file (see Section 9 for a detailed example).
 *   **Polkit Integration:** Instead of manual `sudo` terminal invocation, we could ship a `.policy` file allowing standard desktop launcher execution that prompts for elevated privileges visually just for the backend service startup.
 *   **Tray Icon Integration:** PySide6's `QSystemTrayIcon` can be used to minimize the UI layer to the status bar, since the client/server connection isn't interrupted by a window being hidden. 
 
